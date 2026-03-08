@@ -19,22 +19,29 @@ const API_URL = "https://hr-intelligence-backend.onrender.com";function App() {
   useEffect(() => { fetchCandidates(); }, []);
 
   const handleUpload = async (e) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    setLoading(true);
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  
+  setLoading(true);
 
-    // Create an array of upload tasks for every single file selected
-    const uploadPromises = Array.from(files).map(async (file) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      // Send each file to your Python server
-      return fetch('http://127.0.0.1:8000/upload-resume', { 
-        method: 'POST', 
-        body: formData 
-      });
+  const uploadPromises = Array.from(files).map(async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // FIX 1: Use your LIVE Render URL here, NOT 127.0.0.1
+    const response = await fetch('https://hr-intelligence-backend-m-usman.onrender.com/upload-resume', { 
+      method: 'POST', 
+      body: formData 
     });
+    
+    // FIX 2: Make sure you use 'response' (the variable name we just created)
+    return response.json(); 
+  });
+
+  await Promise.all(uploadPromises);
+  setLoading(false);
+  fetchCandidates(); 
+};
 
     // Wait for all files to finish processing in parallel
     await Promise.all(uploadPromises);
