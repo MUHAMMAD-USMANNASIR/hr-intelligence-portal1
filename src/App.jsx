@@ -1,145 +1,170 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import './App.css';
-const API_URL = "https://hr-intelligence-backend.onrender.com";function App() {
-  const [candidates, setCandidates] = useState([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
 
+// 1. UPDATE THIS TO YOUR LIVE RENDER URL
+const API_URL = "https://hr-intelligence-backend.onrender.com";
+
+function App() {
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // 2. FETCH CANDIDATES FROM THE CLOUD
   const fetchCandidates = async () => {
     try {
       const response = await fetch(`${API_URL}/candidates`);
-      const data = await res.json();
-      setCandidates(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to fetch:", err);
+      const data = await response.json();
+      setCandidates(data);
+    } catch (error) {
+      console.error("Failed to fetch candidates:", error);
     }
   };
 
-  useEffect(() => { fetchCandidates(); }, []);
-
-  const handleUpload = async (e) => {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-  
-  setLoading(true);
-
-  const uploadPromises = Array.from(files).map(async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    // FIX 1: Use your LIVE Render URL here, NOT 127.0.0.1
-    const response = await fetch('https://hr-intelligence-backend-m-usman.onrender.com/upload-resume', { 
-      method: 'POST', 
-      body: formData 
-    });
-    
-    // FIX 2: Make sure you use 'response' (the variable name we just created)
-    return response.json(); 
-  });
-
-  await Promise.all(uploadPromises);
-  setLoading(false);
-  fetchCandidates(); 
-};
-
-    // Wait for all files to finish processing in parallel
-    await Promise.all(uploadPromises);
-    
-    setLoading(false);
-    fetchCandidates(); // Refresh the table once all 50+ files are done!
-  };
-
-  const deleteCandidate = async (id) => {
-    await fetch(`http://127.0.0.1:8000/candidates/${id}`, { method: 'DELETE' });
+  useEffect(() => {
     fetchCandidates();
+  }, []);
+
+  // 3. HANDLE BULK UPLOADS (FIXED 'RES' TYPO)
+  const handleUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setLoading(true);
+    const uploadPromises = Array.from(files).map(async (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch(`${API_URL}/upload-resume`, {
+          method: 'POST',
+          body: formData,
+        });
+        return await response.json();
+      } catch (error) {
+        console.error(`Error uploading ${file.name}:`, error);
+        return { message: "Failed" };
+      }
+    });
+
+    await Promise.all(uploadPromises);
+    setLoading(false);
+    fetchCandidates(); // Refresh the table
   };
 
+  // 4. DELETE A CANDIDATE
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this candidate?")) return;
+    try {
+      await fetch(`${API_URL}/candidates/${id}`, { method: 'DELETE' });
+      fetchCandidates();
+    } catch (error) {
+      console.error("Delete failed:", error);
+    }
+  };
+
+  // 5. EXPORT SHORTLISTED TO EXCEL
   const exportToExcel = () => {
-    // 1. Grab only the shortlisted candidates
     const shortlisted = candidates.filter(c => c.score >= 4 || c.status === "Shortlisted");
     
     if (shortlisted.length === 0) {
-      alert("No shortlisted candidates to export yet!");
+      alert("No shortlisted candidates to export!");
       return;
     }
 
-    // 2. Format the exact columns we want in the Excel sheet
     const exportData = shortlisted.map(c => ({
-      "Candidate Name": c.real_name || "Unknown",
-      "Email Address": c.email || "No Email",
-      "Phone Number": c.phone || "No Phone",
+      "Candidate Name": c.real_name,
+      "Email Address": c.email,
+      "Phone Number": c.phone,
       "AI Score": c.score,
       "Status": c.status,
-      "Original File": c.filename
+      "File Name": c.filename
     }));
 
-    // 3. Build and download the Excel file
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Shortlisted Candidates");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Shortlisted");
     XLSX.writeFile(workbook, "HR_Shortlisted_Candidates.xlsx");
   };
 
-  const filtered = candidates.filter(c => {
-    // We use a fallback just in case a resume has no name extracted at all
-    const searchableName = c.real_name || c.filename || "";
-    return searchableName.toLowerCase().includes(search.toLowerCase());
-  });
+  // 6. FILTER LOGIC
+  const filteredCandidates = candidates.filter(c => 
+    c.real_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="App pro-dashboard">
-      <header>
-        <h1>HR Intelligence Portal</h1>
-        <div className="header-actions">
-          <input 
-            className="search-bar"
-            placeholder="Search candidates..." 
-            onChange={(e) => setSearch(e.target.value)} 
-          />
-          <button className="export-btn" onClick={exportToExcel}>
-            📊 Export Shortlisted
-          </button>
-        </div>
+    <div className="app-container">
+      <header className="glass-header">
+        <h1>🤖 HR Intelligence Portal</h1>
+        <p>AI-Powered Resume Screening & Grading</p>
       </header>
 
-      <div className="upload-container">
-        <label className="custom-upload">
-          {loading ? "Processing Bulk Analysis..." : "📤 Drag & Drop Multiple Resumes Here"}
-          <input type="file" multiple onChange={handleUpload} hidden />
-        </label>
-      </div>
+      <main className="dashboard">
+        <div className="controls-card glass">
+          <div className="upload-section">
+            <label className="upload-btn">
+              📁 Bulk Upload Resumes
+              <input type="file" multiple onChange={handleUpload} hidden />
+            </label>
+            {loading && <span className="loader">Processing AI Analysis...</span>}
+          </div>
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Candidate Info</th>
-              <th>AI Score</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(c => (
-              <tr key={c.id} className={c.score >= 4 ? 'gold-row' : ''}>
-                <td>
-                  <strong>{c.real_name}</strong><br/>
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>✉️ {c.email}</span><br/>
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>📞 {c.phone}</span>
-                </td>
-                <td>{"⭐".repeat(c.score)}</td>
-                <td>
-                  <span className={`badge ${c.status ? c.status.replace(/\s+/g, '') : 'Unknown'}`}>
-                    {c.status || "Unknown"}
-                  </span>
-                </td>
-                <td><button className="del-btn" onClick={() => deleteCandidate(c.id)}>Delete</button></td>
+          <div className="action-section">
+            <input 
+              type="text" 
+              placeholder="Search candidates..." 
+              className="search-input"
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <button className="export-btn" onClick={exportToExcel}>
+              📥 Export Shortlisted (Excel)
+            </button>
+          </div>
+        </div>
+
+        <div className="table-container glass">
+          <table>
+            <thead>
+              <tr>
+                <th>Candidate Name</th>
+                <th>Contact Info</th>
+                <th>AI Score</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredCandidates.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <strong>{c.real_name}</strong>
+                    <br />
+                    <small>{c.filename}</small>
+                  </td>
+                  <td>
+                    {c.email} <br />
+                    {c.phone}
+                  </td>
+                  <td>
+                    <span className={`score-badge score-${c.score}`}>
+                      {Array(c.score).fill("⭐").join("")}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`status-pill ${c.status.toLowerCase()}`}>
+                      {c.status}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="delete-btn" onClick={() => handleDelete(c.id)}>🗑️</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </main>
     </div>
   );
 }
